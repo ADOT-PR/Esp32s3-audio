@@ -1,0 +1,551 @@
+import { useState, useEffect, useRef } from “react”;
+
+// ── Display constants (320×480 portrait, shown at 1.5×) ──────────────────────
+const DW = 320, DH = 480, SC = 1.5;
+
+const TRACKS = [
+{ title: “Midnight Frequencies”, artist: “Synthwave Ghost”,  album: “Neon Horizons”,  dur: 247, hue: 270 },
+{ title: “Electric Pulse”,       artist: “Digital Wave”,     album: “Frequency”,       dur: 183, hue: 195 },
+{ title: “Static Dreams”,        artist: “Radio Ghost”,      album: “White Noise EP”,  dur: 318, hue: 345 },
+{ title: “Binary Sunset”,        artist: “Code Collective”,  album: “Runtime Vol. II”, dur: 204, hue: 150 },
+{ title: “Void Protocol”,        artist: “ΛLGΣ”,             album: “System Crash”,    dur: 271, hue: 30  },
+];
+
+function fmt(s) { return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; }
+function hsl(h, s=80, l=60) { return `hsl(${h},${s}%,${l}%)`; }
+
+// ── Spectrum bars ─────────────────────────────────────────────────────────────
+function useSpectrum(playing, n=22) {
+const [bars, setBars] = useState(() => Array(n).fill(0).map(()=>0.1+Math.random()*0.4));
+const ref = useRef();
+useEffect(()=>{
+const tick = () => {
+setBars(prev => prev.map((b,i) => {
+if (!playing) return Math.max(0.04, b * 0.88);
+const center = Math.sin(i / n * Math.PI);
+const target = center * (0.4 + Math.random() * 0.6);
+return Math.max(0.04, Math.min(1, b + (target - b) * 0.35 + (Math.random()-0.5)*0.12));
+}));
+ref.current = setTimeout(tick, 65);
+};
+ref.current = setTimeout(tick, 65);
+return () => clearTimeout(ref.current);
+}, [playing, n]);
+return bars;
+}
+
+// ── Vinyl record component ────────────────────────────────────────────────────
+function Vinyl({ playing, hue, angle }) {
+const acc = hsl(hue, 85, 58);
+const acc2 = hsl(hue+30, 70, 72);
+const sz = 104;
+return (
+<svg width={sz} height={sz} style={{ display:“block”, filter:`drop-shadow(0 0 12px ${hsl(hue,80,40)}88)` }}>
+{/* Outer disc */}
+<circle cx={sz/2} cy={sz/2} r={sz/2-2} fill="#0a080e" stroke={hsl(hue,40,20)} strokeWidth={1.5} />
+{/* Groove rings */}
+{[42,36,30,24,18,12].map(r=>(
+<circle key={r} cx={sz/2} cy={sz/2} r={r} fill="none"
+stroke={hsl(hue,20,14)} strokeWidth={0.8} opacity={0.6} />
+))}
+{/* Colored band */}
+<circle cx={sz/2} cy={sz/2} r={22} fill={hsl(hue,60,12)} stroke={acc} strokeWidth={1.5} />
+{/* Label background */}
+<circle cx={sz/2} cy={sz/2} r={14} fill={hsl(hue,50,10)} />
+{/* Label accent */}
+<circle cx={sz/2} cy={sz/2} r={10} fill="none" stroke={acc} strokeWidth={1} opacity={0.7} />
+{/* Spindle hole */}
+<circle cx={sz/2} cy={sz/2} r={2.5} fill="#050508" stroke={acc2} strokeWidth={0.8} />
+{/* Sheen arc */}
+<path d={`M ${sz/2-36},${sz/2} A 36,36 0 0,1 ${sz/2+20},${sz/2-30}`}
+fill=“none” stroke=“white” strokeWidth={1} opacity={0.06} strokeLinecap=“round” />
+</svg>
+);
+}
+
+// ── Status bar ────────────────────────────────────────────────────────────────
+function StatusBar({ battery, hue }) {
+const acc = hsl(hue, 80, 62);
+const now = new Date();
+const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2,"0")}`;
+return (
+<div style={{
+height: 22, display:“flex”, alignItems:“center”, justifyContent:“space-between”,
+padding:“0 10px”, background:”#050508”,
+borderBottom:`1px solid ${hsl(hue,40,15)}`,
+}}>
+<span style={{ fontSize:9, color:acc, letterSpacing:2, fontWeight:700 }}>≡ AUDIO</span>
+<span style={{ fontSize:9, color:acc, fontWeight:700, letterSpacing:1 }}>{time}</span>
+<div style={{ display:“flex”, alignItems:“center”, gap:4 }}>
+{/* WiFi icon */}
+<svg width={12} height={9}>
+{[10,7,4].map((r,i)=>(
+<path key={i} d={`M ${6-r},${9-i*2.5} a ${r},${r} 0 0,1 ${r*2},0`}
+fill=“none” stroke={acc} strokeWidth={1.2} opacity={i===0?0.3:i===1?0.6:1} strokeLinecap=“round” />
+))}
+<circle cx={6} cy={9} r={1.5} fill={acc} />
+</svg>
+{/* Battery */}
+<div style={{ display:“flex”, alignItems:“center”, gap:1 }}>
+<div style={{ width:16, height:8, border:`1px solid ${acc}`, borderRadius:2, position:“relative” }}>
+<div style={{ position:“absolute”, left:1, top:1, bottom:1,
+width:`${(battery/100)*14}px`, background:battery>20?acc:”#ef4444”,
+borderRadius:1, transition:“width 0.3s” }} />
+</div>
+<div style={{ width:2, height:4, background:acc, borderRadius:“0 1px 1px 0”, marginLeft:-1 }} />
+<span style={{ fontSize:8, color:acc, marginLeft:2 }}>{battery}%</span>
+</div>
+</div>
+</div>
+);
+}
+
+// ── Navigation bar ────────────────────────────────────────────────────────────
+function NavBar({ screen, setScreen, hue }) {
+const acc = hsl(hue, 80, 62);
+const tabs = [
+{ id:“player”,   icon:“♫”, label:“NOW”   },
+{ id:“files”,    icon:“▤”, label:“FILES”  },
+{ id:“settings”, icon:“◈”, label:“SET”   },
+];
+return (
+<div style={{
+height:32, display:“flex”, borderTop:`1px solid ${hsl(hue,40,15)}`,
+background:”#050508”,
+}}>
+{tabs.map(t => {
+const active = screen === t.id;
+return (
+<div key={t.id} onClick={() => setScreen(t.id)} style={{
+flex:1, display:“flex”, flexDirection:“column”,
+alignItems:“center”, justifyContent:“center”, gap:1,
+cursor:“pointer”,
+background: active ? hsl(hue,60,10) : “transparent”,
+borderTop: active ? `2px solid ${acc}` : “2px solid transparent”,
+}}>
+<span style={{ fontSize:10, color: active ? acc : hsl(hue,20,35) }}>{t.icon}</span>
+<span style={{ fontSize:7, color: active ? acc : hsl(hue,20,30),
+letterSpacing:1.5, fontWeight:700 }}>{t.label}</span>
+</div>
+);
+})}
+</div>
+);
+}
+
+// ── Player screen ─────────────────────────────────────────────────────────────
+function PlayerScreen({ track, trackIdx, setTrackIdx, playing, setPlaying, progress, setProgress, volume, setVolume, bars }) {
+const acc  = hsl(track.hue, 85, 62);
+const acc2 = hsl(track.hue+25, 70, 75);
+const dim  = hsl(track.hue, 30, 30);
+const pct  = (progress / track.dur) * 100;
+const [vinylAngle, setVinylAngle] = useState(0);
+const vRef = useRef();
+
+useEffect(() => {
+const spin = () => {
+if (playing) setVinylAngle(a => (a + 1.2) % 360);
+vRef.current = requestAnimationFrame(spin);
+};
+vRef.current = requestAnimationFrame(spin);
+return () => cancelAnimationFrame(vRef.current);
+}, [playing]);
+
+const prev = () => { setTrackIdx(i=>(i-1+TRACKS.length)%TRACKS.length); setProgress(0); };
+const next = () => { setTrackIdx(i=>(i+1)%TRACKS.length); setProgress(0); };
+const N = bars.length;
+
+return (
+<div style={{ height:“100%”, display:“flex”, flexDirection:“column”, background:”#050508” }}>
+
+```
+  {/* ── Album art + visualizer ──────────────────────────── */}
+  <div style={{
+    flex: "0 0 200px", position:"relative", overflow:"hidden",
+    background: `radial-gradient(ellipse at 50% 60%, ${hsl(track.hue,50,8)} 0%, #050508 70%)`,
+    display:"flex", alignItems:"center", justifyContent:"center",
+  }}>
+    {/* Glow halo */}
+    <div style={{
+      position:"absolute", width:130, height:130, borderRadius:"50%",
+      background:`radial-gradient(circle, ${hsl(track.hue,70,25)}44 0%, transparent 70%)`,
+      filter:"blur(12px)",
+    }} />
+    {/* Vinyl record */}
+    <div style={{ transform:`rotate(${vinylAngle}deg)`, transition: playing?"none":"transform 0.1s" }}>
+      <Vinyl playing={playing} hue={track.hue} angle={vinylAngle} />
+    </div>
+    {/* Spectrum bars overlay — bottom of art area */}
+    <div style={{
+      position:"absolute", bottom:0, left:0, right:0, height:52,
+      display:"flex", alignItems:"flex-end", gap:1, padding:"0 10px",
+      background:"linear-gradient(to top, #05050888, transparent)",
+    }}>
+      {bars.map((b,i) => {
+        const t = i / (N-1);
+        const barHue = track.hue + t * 60;
+        return (
+          <div key={i} style={{
+            flex:1, height:`${b*48}px`,
+            background:`linear-gradient(to top, ${hsl(barHue,90,55)}, ${hsl(barHue+20,80,75)}44)`,
+            borderRadius:"2px 2px 0 0",
+            minWidth:0,
+            transition:"height 0.065s ease-out",
+          }} />
+        );
+      })}
+    </div>
+    {/* Scanline overlay */}
+    <div style={{
+      position:"absolute", inset:0, pointerEvents:"none",
+      backgroundImage:"repeating-linear-gradient(0deg, transparent, transparent 2px, #00000018 2px, #00000018 3px)",
+    }} />
+  </div>
+
+  {/* ── Track info ──────────────────────────────────────── */}
+  <div style={{ padding:"8px 12px 4px", overflow:"hidden" }}>
+    <div style={{
+      fontSize:14, fontWeight:900, color:acc, letterSpacing:0.3,
+      whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+    }}>{track.title}</div>
+    <div style={{ fontSize:11, color:dim, marginTop:2, letterSpacing:1 }}>
+      {track.artist}
+    </div>
+    <div style={{ fontSize:9, color:hsl(track.hue,20,25), marginTop:1, letterSpacing:1 }}>
+      {track.album}
+    </div>
+  </div>
+
+  {/* ── Progress bar ────────────────────────────────────── */}
+  <div style={{ padding:"6px 12px" }}>
+    <div style={{
+      height:3, background:hsl(track.hue,20,14), borderRadius:2,
+      position:"relative", cursor:"pointer",
+    }}>
+      <div style={{
+        position:"absolute", left:0, top:0, height:"100%",
+        width:`${pct}%`, borderRadius:2,
+        background:`linear-gradient(to right, ${hsl(track.hue,80,45)}, ${acc2})`,
+        transition:"width 0.5s linear",
+      }} />
+      <div style={{
+        position:"absolute", top:"50%", left:`${pct}%`,
+        transform:"translate(-50%,-50%)",
+        width:8, height:8, borderRadius:"50%",
+        background:acc2, boxShadow:`0 0 6px ${acc}`,
+      }} />
+    </div>
+    <div style={{ display:"flex", justifyContent:"space-between", marginTop:4 }}>
+      <span style={{ fontSize:9, color:dim }}>{fmt(progress)}</span>
+      <span style={{ fontSize:9, color:hsl(track.hue,20,25) }}>{fmt(track.dur)}</span>
+    </div>
+  </div>
+
+  {/* ── Transport controls ───────────────────────────────── */}
+  <div style={{
+    display:"flex", alignItems:"center", justifyContent:"space-around",
+    padding:"4px 16px",
+  }}>
+    {/* Shuffle */}
+    <div style={{ color:hsl(track.hue,30,35), fontSize:14, cursor:"pointer" }}>⇄</div>
+    {/* Prev */}
+    <div onClick={prev} style={{
+      width:34, height:34, display:"flex", alignItems:"center", justifyContent:"center",
+      cursor:"pointer", color:acc, fontSize:18,
+    }}>◀◀</div>
+    {/* Play/Pause */}
+    <div onClick={() => setPlaying(p=>!p)} style={{
+      width:48, height:48, borderRadius:"50%", cursor:"pointer",
+      background:`radial-gradient(circle, ${hsl(track.hue,60,20)}, ${hsl(track.hue,40,12)})`,
+      border:`2px solid ${acc}`,
+      boxShadow:`0 0 16px ${acc}66`,
+      display:"flex", alignItems:"center", justifyContent:"center",
+      fontSize:20, color:acc,
+      transition:"box-shadow 0.2s",
+    }}>
+      {playing ? "⏸" : "▶"}
+    </div>
+    {/* Next */}
+    <div onClick={next} style={{
+      width:34, height:34, display:"flex", alignItems:"center", justifyContent:"center",
+      cursor:"pointer", color:acc, fontSize:18,
+    }}>▶▶</div>
+    {/* Repeat */}
+    <div style={{ color:hsl(track.hue,30,35), fontSize:14, cursor:"pointer" }}>↺</div>
+  </div>
+
+  {/* ── Volume ──────────────────────────────────────────── */}
+  <div style={{ padding:"4px 14px", display:"flex", alignItems:"center", gap:8 }}>
+    <span style={{ fontSize:11, color:dim }}>🔈</span>
+    <div style={{
+      flex:1, height:3, background:hsl(track.hue,20,12), borderRadius:2,
+      position:"relative", cursor:"pointer",
+    }}
+      onClick={e => {
+        const r = e.currentTarget.getBoundingClientRect();
+        setVolume(Math.round(((e.clientX-r.left)/r.width)*100));
+      }}
+    >
+      <div style={{
+        height:"100%", width:`${volume}%`, borderRadius:2,
+        background:`linear-gradient(to right, ${hsl(track.hue,70,40)}, ${acc})`,
+        transition:"width 0.1s",
+      }} />
+    </div>
+    <span style={{ fontSize:9, color:dim, minWidth:24, textAlign:"right" }}>{volume}%</span>
+    <span style={{ fontSize:11, color:dim }}>🔊</span>
+  </div>
+</div>
+```
+
+);
+}
+
+// ── Files screen ──────────────────────────────────────────────────────────────
+function FilesScreen({ trackIdx, setTrackIdx, setProgress, setScreen, hue }) {
+const acc = hsl(hue, 80, 62);
+return (
+<div style={{ height:“100%”, display:“flex”, flexDirection:“column” }}>
+{/* Header */}
+<div style={{
+padding:“8px 12px”, display:“flex”, alignItems:“center”, gap:8,
+borderBottom:`1px solid ${hsl(hue,30,12)}`,
+}}>
+<span style={{ color:acc, fontSize:12 }}>▤</span>
+<span style={{ color:acc, fontSize:11, fontWeight:800, letterSpacing:2 }}>LIBRARY</span>
+<span style={{ color:hsl(hue,20,30), fontSize:9, marginLeft:“auto” }}>{TRACKS.length} tracks</span>
+</div>
+{/* Track list */}
+<div style={{ flex:1, overflowY:“auto” }}>
+{TRACKS.map((t, i) => {
+const active = i === trackIdx;
+const ta = hsl(t.hue, 80, 62);
+return (
+<div key={i} onClick={() => { setTrackIdx(i); setProgress(0); setScreen(“player”); }}
+style={{
+padding:“10px 12px”, cursor:“pointer”,
+background: active ? hsl(t.hue,40,8) : “transparent”,
+borderLeft: active ? `3px solid ${ta}` : “3px solid transparent”,
+borderBottom:`1px solid #0d0d12`,
+display:“flex”, alignItems:“center”, gap:10,
+}}>
+{/* Track number / indicator */}
+<div style={{
+width:24, height:24, borderRadius:“50%”,
+background: active ? hsl(t.hue,60,15) : “#0d0d12”,
+border:`1px solid ${active ? ta : hsl(t.hue,20,18)}`,
+display:“flex”, alignItems:“center”, justifyContent:“center”,
+fontSize:9, color: active ? ta : hsl(t.hue,20,35),
+fontWeight:800, flexShrink:0,
+}}>
+{active ? “♫” : `${i+1}`}
+</div>
+<div style={{ flex:1, minWidth:0 }}>
+<div style={{
+fontSize:11, fontWeight:700, color: active ? ta : “#c0c0d0”,
+whiteSpace:“nowrap”, overflow:“hidden”, textOverflow:“ellipsis”,
+}}>{t.title}</div>
+<div style={{ fontSize:9, color:hsl(t.hue,20,30), marginTop:1 }}>
+{t.artist}
+</div>
+</div>
+<div style={{ fontSize:9, color:hsl(t.hue,20,28), flexShrink:0 }}>
+{fmt(t.dur)}
+</div>
+</div>
+);
+})}
+</div>
+</div>
+);
+}
+
+// ── Settings screen ───────────────────────────────────────────────────────────
+function SettingsScreen({ hue }) {
+const acc = hsl(hue, 80, 62);
+const [eq, setEq] = useState([60,70,65,75,68]);
+const bands = [“60Hz”,“250Hz”,“1kHz”,“4kHz”,“16kHz”];
+return (
+<div style={{ height:“100%”, display:“flex”, flexDirection:“column” }}>
+<div style={{
+padding:“8px 12px”, display:“flex”, alignItems:“center”, gap:8,
+borderBottom:`1px solid ${hsl(hue,30,12)}`,
+}}>
+<span style={{ color:acc, fontSize:12 }}>◈</span>
+<span style={{ color:acc, fontSize:11, fontWeight:800, letterSpacing:2 }}>SETTINGS</span>
+</div>
+<div style={{ padding:“12px”, flex:1 }}>
+{/* EQ */}
+<div style={{ color:acc, fontSize:9, letterSpacing:2, marginBottom:10 }}>EQUALIZER</div>
+<div style={{ display:“flex”, gap:8, alignItems:“flex-end”, height:80, marginBottom:12 }}>
+{eq.map((v,i) => (
+<div key={i} style={{ flex:1, display:“flex”, flexDirection:“column”, alignItems:“center”, gap:4 }}>
+<div style={{
+flex:1, width:“100%”, background:hsl(hue,20,10),
+borderRadius:3, position:“relative”, cursor:“pointer”,
+minHeight:60,
+}}
+onClick={e => {
+const r = e.currentTarget.getBoundingClientRect();
+const pct = 1 - (e.clientY - r.top) / r.height;
+setEq(prev => prev.map((val,j) => j===i ? Math.round(pct*100) : val));
+}}
+>
+<div style={{
+position:“absolute”, bottom:0, left:0, right:0,
+height:`${v}%`, borderRadius:3,
+background:`linear-gradient(to top, ${hsl(hue+i*10,80,45)}, ${hsl(hue+i*10+20,70,70)}88)`,
+transition:“height 0.1s”,
+}} />
+</div>
+<span style={{ fontSize:7, color:hsl(hue,20,30) }}>{bands[i]}</span>
+</div>
+))}
+</div>
+{/* Settings rows */}
+{[
+[“Output Mode”, “Stereo I2S”],
+[“Sample Rate”, “44.1 kHz”],
+[“Bit Depth”, “16-bit”],
+[“Display BL”, “Auto”],
+[“Repeat”, “Off”],
+].map(([k,v],i) => (
+<div key={i} style={{
+display:“flex”, justifyContent:“space-between”, alignItems:“center”,
+padding:“8px 0”, borderBottom:`1px solid ${hsl(hue,20,10)}`,
+}}>
+<span style={{ fontSize:10, color:hsl(hue,20,40) }}>{k}</span>
+<span style={{ fontSize:10, color:acc, fontWeight:700 }}>{v}</span>
+</div>
+))}
+</div>
+</div>
+);
+}
+
+// ── Main App ──────────────────────────────────────────────────────────────────
+export default function App() {
+const [screen,   setScreen]   = useState(“player”);
+const [trackIdx, setTrackIdx] = useState(0);
+const [playing,  setPlaying]  = useState(true);
+const [progress, setProgress] = useState(42);
+const [volume,   setVolume]   = useState(75);
+const [battery,  setBattery]  = useState(87);
+const bars = useSpectrum(playing);
+const track = TRACKS[trackIdx];
+
+useEffect(() => {
+if (!playing) return;
+const t = setInterval(() => setProgress(p => (p+1) >= track.dur ? 0 : p+1), 1000);
+return () => clearInterval(t);
+}, [playing, track.dur]);
+
+useEffect(() => {
+const t = setInterval(() => setBattery(b => Math.max(1, b - 0.01)), 10000);
+return () => clearInterval(t);
+}, []);
+
+return (
+<div style={{
+minHeight:“100vh”, background:”#020204”,
+display:“flex”, flexDirection:“column”,
+alignItems:“center”, justifyContent:“center”,
+fontFamily:”‘Courier New’, monospace”,
+padding:“20px”,
+gap:20,
+}}>
+
+```
+  {/* Label */}
+  <div style={{ textAlign:"center" }}>
+    <div style={{ fontSize:10, color:hsl(track.hue,40,30), letterSpacing:4, textTransform:"uppercase" }}>
+      3.5" TFT Display Preview — 320 × 480px
+    </div>
+    <div style={{ fontSize:9, color:hsl(track.hue,20,22), marginTop:4 }}>
+      Interactive mockup · tap controls · switch screens below
+    </div>
+  </div>
+
+  {/* Device frame */}
+  <div style={{
+    width: DW * SC + 24,
+    position:"relative",
+    background:"#0c0c14",
+    borderRadius:16,
+    border:`2px solid ${hsl(track.hue,30,16)}`,
+    boxShadow:`0 0 0 1px ${hsl(track.hue,20,10)}, 0 0 60px ${hsl(track.hue,60,20)}33, 0 40px 80px #00000099`,
+    padding:12,
+    transition:"border-color 0.4s, box-shadow 0.4s",
+  }}>
+    {/* Corner screws */}
+    {[[8,8],[DW*SC+16-8,8],[8,DH*SC+24-8],[DW*SC+16-8,DH*SC+24-8]].map(([x,y],i)=>(
+      <div key={i} style={{
+        position:"absolute", left:x-3, top:y-3, width:6, height:6,
+        borderRadius:"50%", background:"#0a0a12",
+        border:`1px solid ${hsl(track.hue,20,18)}`,
+      }} />
+    ))}
+
+    {/* Screen */}
+    <div style={{
+      width: DW * SC,
+      height: DH * SC,
+      borderRadius:6,
+      overflow:"hidden",
+      position:"relative",
+      transform:`scale(1)`,
+      transformOrigin:"top left",
+    }}>
+      {/* Inner content scaled */}
+      <div style={{
+        width: DW,
+        height: DH,
+        transform:`scale(${SC})`,
+        transformOrigin:"top left",
+        background:"#050508",
+        display:"flex",
+        flexDirection:"column",
+      }}>
+        <StatusBar battery={Math.round(battery)} hue={track.hue} />
+        <div style={{ flex:1, overflow:"hidden" }}>
+          {screen==="player"   && <PlayerScreen track={track} trackIdx={trackIdx}
+            setTrackIdx={setTrackIdx} playing={playing} setPlaying={setPlaying}
+            progress={progress} setProgress={setProgress}
+            volume={volume} setVolume={setVolume} bars={bars} />}
+          {screen==="files"    && <FilesScreen trackIdx={trackIdx}
+            setTrackIdx={setTrackIdx} setProgress={setProgress}
+            setScreen={setScreen} hue={track.hue} />}
+          {screen==="settings" && <SettingsScreen hue={track.hue} />}
+        </div>
+        <NavBar screen={screen} setScreen={setScreen} hue={track.hue} />
+      </div>
+      {/* Glass glare */}
+      <div style={{
+        position:"absolute", inset:0, pointerEvents:"none",
+        background:"linear-gradient(135deg, #ffffff06 0%, transparent 50%)",
+        borderRadius:6,
+      }} />
+    </div>
+  </div>
+
+  {/* Legend */}
+  <div style={{
+    display:"flex", gap:16, flexWrap:"wrap", justifyContent:"center",
+    maxWidth: DW * SC + 24,
+  }}>
+    {[
+      { c:hsl(track.hue,80,62), l:"Tap play/pause" },
+      { c:hsl(track.hue,80,62), l:"Tap ◀◀ ▶▶ to skip" },
+      { c:hsl(track.hue,80,62), l:"Click volume bar" },
+      { c:hsl(track.hue,80,62), l:"EQ sliders in settings" },
+    ].map(({c,l})=>(
+      <span key={l} style={{ fontSize:9, color:hsl(track.hue,20,30), letterSpacing:1 }}>
+        <span style={{color:c}}>›</span> {l}
+      </span>
+    ))}
+  </div>
+</div>
+```
+
+);
+}
