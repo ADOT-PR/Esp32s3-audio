@@ -9,6 +9,114 @@ A full-featured portable audio player built on the **ESP32-S3** with a 3.5″ TF
 
 -----
 
+## 🚀 Quick Start — First Flash
+
+Follow these steps in order. The whole process takes about 10 minutes.
+
+### Step 1 — Create the sketch folder
+
+Create a folder named exactly `audio_player`. Put `audio_player.ino` inside it.
+The folder name and file name **must match**.
+
+```
+audio_player/
+└── audio_player.ino
+```
+
+### Step 2 — Fix the TFT library
+
+Copy `User_Setup.h` from this repo into your TFT_eSPI library folder,
+replacing the file that’s already there:
+
+```
+Arduino/libraries/TFT_eSPI/User_Setup.h   ← replace this
+```
+
+> **Why?** TFT_eSPI needs to know your exact pin wiring at compile time.
+> Without this step the display will stay blank.
+
+### Step 3 — Install ESP32 board support
+
+Open Arduino IDE → **File → Preferences** → paste into *Additional Boards Manager URLs*:
+
+```
+https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+```
+
+Then: **Tools → Board Manager** → search **esp32** → install **esp32 by Espressif Systems**
+
+### Step 4 — Install libraries
+
+Open **Sketch → Include Library → Manage Libraries** and install all four:
+
+|Library       |Author      |Search for      |
+|--------------|------------|----------------|
+|TFT_eSPI      |Bodmer      |`TFT_eSPI`      |
+|TJpg_Decoder  |Bodmer      |`TJpg_Decoder`  |
+|ESP32-audioI2S|schreibfaul1|`ESP32-audioI2S`|
+|RTClib        |Adafruit    |`RTClib`        |
+
+These are already included and need no install: `SD` `SPI` `Wire` `WiFi` `Preferences` `ArduinoOTA` `WebServer`
+
+### Step 5 — Set board settings
+
+**Tools** menu — set every option exactly as shown:
+
+|Setting         |Value                                              |
+|----------------|---------------------------------------------------|
+|Board           |**ESP32S3 Dev Module**                             |
+|USB Mode        |**Hardware CDC and JTAG**                          |
+|Upload Speed    |**921600**                                         |
+|Flash Size      |**8MB (64Mb)**                                     |
+|Partition Scheme|**Huge APP (3MB no OTA)**                          |
+|CPU Frequency   |**240MHz**                                         |
+|PSRAM           |**Disabled** *(or OPI PSRAM if your module has it)*|
+
+### Step 6 — Flash
+
+1. Plug the board in via USB
+1. Select the correct port under **Tools → Port**
+1. Click **Upload** (the arrow button)
+1. Wait for *Done uploading*
+
+> If upload fails with a timeout error, hold the **BOOT** button on the board
+> while clicking Upload, then release it once uploading starts.
+
+### Step 7 — Prepare the SD card
+
+Format as **FAT32**. Drop your music in folders and add these optional config files:
+
+```
+/wifi.txt        →  line 1: network name,  line 2: password
+/stations.txt    →  internet radio  (Name|URL per line)
+```
+
+Insert the SD card and power on — the player will scan all folders then auto-play.
+
+### What happens on first boot
+
+```
+Splash screen
+  ↓
+Mounting SD...       (red text + halt if SD fails — check wiring)
+  ↓
+Scanning tracks...   (recursive scan of all folders)
+  ↓
+Connecting WiFi...   (skipped silently if no wifi.txt on SD)
+  ↓
+Now Playing screen   (auto-plays last track from NVS, or track 1)
+```
+
+### After first flash — OTA wireless updates
+
+Once WiFi is connected you never need the USB cable again:
+
+1. Arduino IDE → **Tools → Port** → select the network port named **audio-player**
+1. Click Upload as normal — firmware uploads over WiFi
+1. Default OTA password: `ota1234` *(change in the sketch before first flash)*
+
+-----
+
 ## ✨ Features
 
 ### Audio
@@ -141,72 +249,57 @@ Put the 4CH LLC on the SD SPI lines (SCL, SDA, MISO, CS):
 
 ## 💻 Software Setup
 
-### 1. Install Arduino IDE Board Support
+> **First time?** Follow the [🚀 Quick Start](#-quick-start--first-flash) section at the top —
+> it walks through every step with exact settings.
 
-File → Preferences → Additional Boards URLs:
+### TFT_eSPI pin configuration (User_Setup.h)
 
-```
-https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-```
-
-Then: Tools → Board Manager → search **esp32** → install **esp32 by Espressif**
-
-### 2. Install Libraries (Library Manager)
-
-|Library       |Author      |Purpose                  |
-|--------------|------------|-------------------------|
-|TFT_eSPI      |Bodmer      |ST7796 display driver    |
-|TJpg_Decoder  |Bodmer      |JPEG album art decode    |
-|ESP32-audioI2S|schreibfaul1|MP3/WAV/AAC/FLAC playback|
-|RTClib        |Adafruit    |DS1307 RTC               |
-|arduinoFFT    |kosme       |Spectrum analyser        |
-
-Built-in (no install): `SD`, `SPI`, `Wire`, `WiFi`, `Preferences`, `ArduinoOTA`, `WebServer`
-
-### 3. Configure TFT_eSPI
-
-**Replace** `Arduino/libraries/TFT_eSPI/User_Setup.h` with the `User_Setup.h` from this repo.
+The `User_Setup.h` in this repo is pre-configured for this project’s wiring.
+Copy it to `Arduino/libraries/TFT_eSPI/User_Setup.h` before compiling.
 
 ```cpp
-#define ST7796_DRIVER
-#define TFT_WIDTH  320
-#define TFT_HEIGHT 480
-#define TFT_MOSI  6    // SDA on TFT label
-#define TFT_SCLK  5    // SCL on TFT label
+#define ST7796_DRIVER      // 3.5" ST7796S controller
+#define TFT_MOSI  6        // SDA on TFT board label
+#define TFT_SCLK  5        // SCL on TFT board label
 #define TFT_CS    8
 #define TFT_DC    9
 #define TFT_RST   10
+// BL (GPIO 11) controlled via analogWrite() — not defined here
+// No MISO — TFT is write-only
 #define SPI_FREQUENCY 40000000
 ```
 
-### 4. Arduino IDE Board Settings
+### Required libraries
 
-|Setting         |Value                                    |
-|----------------|-----------------------------------------|
-|Board           |ESP32S3 Dev Module                       |
-|USB Mode        |Hardware CDC and JTAG                    |
-|Flash Size      |8MB                                      |
-|Partition Scheme|Huge APP (3MB + 1MB SPIFFS)              |
-|PSRAM           |OPI PSRAM *(if your module has it)*      |
-|CPU Frequency   |240MHz *(code scales it down at runtime)*|
+|Library       |Author      |Install via    |
+|--------------|------------|---------------|
+|TFT_eSPI      |Bodmer      |Library Manager|
+|TJpg_Decoder  |Bodmer      |Library Manager|
+|ESP32-audioI2S|schreibfaul1|Library Manager|
+|RTClib        |Adafruit    |Library Manager|
 
-### 5. Upload
+Built-in (no install needed): `SD` `SPI` `Wire` `WiFi` `Preferences` `ArduinoOTA` `WebServer`
 
-Select the correct USB port and click Upload. On first flash, use the USB cable. After that, OTA updates work over WiFi.
+### Board settings summary
+
+|Setting         |Value                                 |
+|----------------|--------------------------------------|
+|Board           |ESP32S3 Dev Module                    |
+|USB Mode        |Hardware CDC and JTAG                 |
+|Upload Speed    |921600                                |
+|Flash Size      |8MB (64Mb)                            |
+|Partition Scheme|**Huge APP (3MB no OTA)**             |
+|CPU Frequency   |240MHz                                |
+|PSRAM           |Disabled *(or OPI PSRAM if available)*|
 
 -----
 
 ## 📂 File Structure
 
 ```
-esp32-audio-player/
-├── audio_player.ino    Main sketch — globals, setup(), loop(), key handler
-├── config.h            Pins, colours, structs, extern declarations
-├── audio_engine.h      FreeRTOS audio task, biquad EQ DSP, FFT visualiser
-├── ui_manager.h        All TFT screens, marquee sprite, animations
-├── features.h          NVS, SD scan, playlists, search, sleep timer, alarm
-├── network.h           WiFi, OTA, web server, NTP, Last.fm
-└── User_Setup.h        TFT_eSPI pin configuration (copy to library folder)
+audio_player/              ← folder name must match the .ino filename
+├── audio_player.ino       Complete single-file sketch (ready to flash)
+└── User_Setup.h           Copy this to Arduino/libraries/TFT_eSPI/
 ```
 
 -----
@@ -290,7 +383,7 @@ GET /search?q=jazz   → search tracks
 1. Connect player to WiFi (needs `wifi.txt` on SD card)
 1. In Arduino IDE: Tools → Port → select the network port **audio-player**
 1. Upload as normal — no USB required
-1. Default OTA password: `ota-pass` *(change in `network.h` before first flash)*
+1. Default OTA password: `ota1234` *(change in the sketch before first flash)*
 
 -----
 
