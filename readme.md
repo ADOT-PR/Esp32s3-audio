@@ -433,6 +433,16 @@ MIT License — free to use, modify, and distribute. Attribution appreciated.
 
 -----
 
+## 👤 Creator
+
+<img src="adotpr.jpeg" width="120" align="left" style="margin-right:16px"/>
+
+**ADOTPR** — concept, hardware design, wiring, and project direction.
+
+<br clear="left"/>
+
+-----
+
 ## 🙏 Credits
 
 - [schreibfaul1/ESP32-audioI2S](https://github.com/schreibfaul1/ESP32-audioI2S) — audio engine
